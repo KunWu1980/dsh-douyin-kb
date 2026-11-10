@@ -61,7 +61,7 @@ curl.exe -L -o "$env:USERPROFILE\.dsh\douyin-kb\models\silero_vad.onnx" `
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `vault` | `%USERPROFILE%\Documents\Obsidian Vault`（示例路径） | Obsidian Vault 根目录；也可用环境变量 `OBSIDIAN_VAULT`。请改成你自己的库路径 |
+| `vault` | 自动识别（Obsidian 当前打开的库） | 也支持环境变量 `OBSIDIAN_VAULT` 或本地 `config.json` 覆盖 |
 | `kbHome` | `%USERPROFILE%\.dsh\douyin-kb` | 模型、浏览器配置、下载缓存；也可用 `DOUYIN_KB_HOME` |
 | `python` | 自动探测 | 指定 Python 可执行文件；也可用 `DOUYIN_KB_PYTHON` |
 | `timeoutSeconds` | `900` | 单次工具调用超时 |
