@@ -1,0 +1,3 @@
+- insert:
+    - id: douyin-kb
+      name: '@local/douyin-kb'

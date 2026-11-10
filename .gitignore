@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+*.log
+browser-profile/
+__pycache__/
+*.pyc
+.DS_Store

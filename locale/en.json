@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Douyin to OB (beginner-friendly)",
+    "description": "A dead-simple workflow: you paste a Douyin video link (easy to copy from the Douyin PC app), and the plugin turns the video's speech into a timestamped transcript and imports it straight into Obsidian. Made for DeepSeek Harness and for anyone getting started with a personal knowledge base."
+  }
+}
