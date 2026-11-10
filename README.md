@@ -1,4 +1,4 @@
-# 抖音转OB（初学者适用）— 抖音视频 → Obsidian 知识库
+﻿# 抖音转OB（初学者适用）— 抖音视频 → Obsidian 知识库
 
 > 一个简单的人工提供抖音链接（可通过抖音PC客户端获得），由本插件自动将视频内容转化文字记录，并自动导入到Obsidian中，适用于harness、个人知识库搭建初学者上手。
 
@@ -16,7 +16,7 @@
 
 ```sh
 # 1. 从 GitHub 仓库（推荐给用户；仓库根目录即本目录）
-dsh plugin add github:<owner>/dsh-douyin-kb
+dsh plugin add github:KunWu1980/dsh-douyin-kb
 
 # 2. 从本地打包产物
 dsh plugin add C:\path\to\douyin-kb-1.0.0.tgz

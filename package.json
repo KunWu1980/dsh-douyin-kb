@@ -12,6 +12,14 @@
     "sherpa-onnx"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KunWu1980/dsh-douyin-kb.git"
+  },
+  "homepage": "https://github.com/KunWu1980/dsh-douyin-kb#readme",
+  "bugs": {
+    "url": "https://github.com/KunWu1980/dsh-douyin-kb/issues"
+  },
   "type": "module",
   "exports": {
     ".": "./index.js",

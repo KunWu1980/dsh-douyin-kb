@@ -15,8 +15,8 @@
 #   - description.en 必填；含 ": " 时必须加引号（下面已经用引号包住）
 #   - 只提交这一个文件，不要手改生成的 README
 
-url: https://github.com/OWNER/REPO
-name: OWNER/REPO
+url: https://github.com/KunWu1980/dsh-douyin-kb
+name: KunWu1980/dsh-douyin-kb
 category: tools
 description:
   en: 'You paste a Douyin video link (easy to copy from the Douyin PC app); the plugin transcribes the video into text with timestamps and imports it into Obsidian automatically. Made for DeepSeek Harness and for beginners building a personal knowledge base.'
