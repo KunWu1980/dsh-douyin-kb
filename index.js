@@ -9,6 +9,12 @@ const SCRIPT = path.join(here, "assets", "douyin_kb.py");
 const DEFAULT_KB_HOME = path.join(homedir(), ".dsh", "douyin-kb");
 const CONFIG_FILE = path.join(DEFAULT_KB_HOME, "config.json");
 const DEFAULT_VAULT = path.join(homedir(), "Documents", "Obsidian Vault");
+const OBSIDIAN_CONFIG =
+	process.platform === "win32"
+		? path.join(process.env.APPDATA || path.join(homedir(), "AppData", "Roaming"), "obsidian", "obsidian.json")
+		: process.platform === "darwin"
+			? path.join(homedir(), "Library", "Application Support", "obsidian", "obsidian.json")
+			: path.join(homedir(), ".config", "obsidian", "obsidian.json");
 
 /** Local machine settings live outside the repo, in ~/.dsh/douyin-kb/config.json. */
 function readLocalConfig() {
@@ -18,6 +24,33 @@ function readLocalConfig() {
 	} catch {
 		return {};
 	}
+}
+
+/** Ask Obsidian itself which vault is open, so no path has to be stored anywhere. */
+function detectObsidianVault() {
+	try {
+		const config = JSON.parse(readFileSync(OBSIDIAN_CONFIG, "utf8"));
+		const vaults = Object.values(config?.vaults ?? {}).filter(
+			(vault) => vault !== null && typeof vault === "object" && typeof vault.path === "string" && vault.path.length > 0,
+		);
+		if (vaults.length === 0) return undefined;
+		const opened = vaults.find((vault) => vault.open === true);
+		if (opened !== undefined) return opened.path;
+		vaults.sort((left, right) => Number(right.ts ?? 0) - Number(left.ts ?? 0));
+		return vaults[0].path;
+	} catch {
+		return undefined;
+	}
+}
+
+function resolveVault(configured) {
+	return (
+		configured ||
+		process.env.OBSIDIAN_VAULT ||
+		readLocalConfig().vault ||
+		detectObsidianVault() ||
+		DEFAULT_VAULT
+	);
 }
 
 const PARAMETERS = {
@@ -153,11 +186,7 @@ function describeIngest(outcome) {
 
 function apply(ctx, config) {
 	const settings = {
-		vault:
-			(config && config.vault) ||
-			process.env.OBSIDIAN_VAULT ||
-			readLocalConfig().vault ||
-			DEFAULT_VAULT,
+		vault: resolveVault(config && config.vault),
 		kbHome: (config && config.kbHome) || DEFAULT_KB_HOME,
 		python: findPython(config && config.python),
 		timeoutSeconds: (config && Number(config.timeoutSeconds)) || 900,

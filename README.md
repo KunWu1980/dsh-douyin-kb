@@ -66,13 +66,13 @@ curl.exe -L -o "$env:USERPROFILE\.dsh\douyin-kb\models\silero_vad.onnx" `
 | `python` | 自动探测 | 指定 Python 可执行文件；也可用 `DOUYIN_KB_PYTHON` |
 | `timeoutSeconds` | `900` | 单次工具调用超时 |
 
-本机专属设置（例如你自己的 Vault 路径）写在插件目录**之外**的 `%USERPROFILE%\.dsh\douyin-kb\config.json`，不会随源码一起发布：
+本机专属设置**不需要手动填写**：插件会读 Obsidian 自己的 `obsidian.json`，用“当前打开的那个库”作为 `vault`。只有在你想覆盖时才需要额外指定——写在插件目录之外的 `%USERPROFILE%\.dsh\douyin-kb\config.json`（该文件不在仓库里，也不会随插件发布）：
 
 ```json
 { "vault": "D:\\path\\to\\Obsidian Vault" }
 ```
 
-读取优先级：插件配置 `vault` → 环境变量 `OBSIDIAN_VAULT` → `config.json` 的 `vault` → 默认 `%USERPROFILE%\Documents\Obsidian Vault`。
+读取优先级：插件配置 `vault` → 环境变量 `OBSIDIAN_VAULT` → `config.json` 的 `vault` → Obsidian 当前打开的库 → 默认 `%USERPROFILE%\Documents\Obsidian Vault`。
 
 ## 左侧栏面板（初学者推荐）
 

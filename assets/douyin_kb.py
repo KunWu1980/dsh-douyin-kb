@@ -44,9 +44,39 @@ def _config_value(name: str) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _obsidian_config_file() -> Path:
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+        return base / "obsidian" / "obsidian.json"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "obsidian" / "obsidian.json"
+    return Path.home() / ".config" / "obsidian" / "obsidian.json"
+
+
+def _detect_obsidian_vault() -> Path | None:
+    """向 Obsidian 自己的配置要“当前打开的库”，这样用户无需填写任何路径。"""
+    try:
+        data = json.loads(_obsidian_config_file().read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    vaults = [
+        item
+        for item in (data.get("vaults") or {}).values()
+        if isinstance(item, dict) and isinstance(item.get("path"), str) and item["path"].strip()
+    ]
+    if not vaults:
+        return None
+    for item in vaults:
+        if item.get("open") is True:
+            return Path(item["path"])
+    vaults.sort(key=lambda item: float(item.get("ts") or 0), reverse=True)
+    return Path(vaults[0]["path"])
+
+
 DEFAULT_VAULT = Path(
     os.environ.get("OBSIDIAN_VAULT")
     or _config_value("vault")
+    or _detect_obsidian_vault()
     or str(Path.home() / "Documents" / "Obsidian Vault")
 )
 NOTE_SUBDIR = "抖音收藏"
