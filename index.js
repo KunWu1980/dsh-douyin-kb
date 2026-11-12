@@ -219,31 +219,29 @@ function apply(ctx, config) {
 		},
 	});
 
-	ctx.inject(["commands"], (scope) => {
-		scope.commands.register({
-			name: "douyin",
-			description: "把一条抖音视频下载、离线转写并写入本机 Obsidian 知识库",
-			input: { hint: "<抖音分享链接或整段分享文案>" },
-			handler: async ({ rawInput }) => {
-				const target = String(rawInput ?? "").trim();
-				if (target.length === 0) {
-					return { kind: "error", text: "请在 /douyin 后面粘贴一条抖音分享链接。" };
-				}
-				const controller = new AbortController();
-				const timer = setTimeout(() => controller.abort(), Math.max(30, settings.timeoutSeconds) * 1000);
-				try {
-					const outcome = await runScript(settings, { action: "ingest", target, force: true }, controller.signal);
-					return { kind: outcome.ok ? "success" : "error", text: describeIngest(outcome) };
-				} catch (error) {
-					return { kind: "error", text: `抓取失败：${String((error && error.message) || error)}` };
-				} finally {
-					clearTimeout(timer);
-				}
-			},
-		});
-	});
+	ctx.effect(() => ctx.commands.register({
+		name: "douyin",
+		description: "把一条抖音视频下载、离线转写并写入本机 Obsidian 知识库",
+		input: { hint: "<抖音分享链接或整段分享文案>" },
+		handler: async ({ rawInput }) => {
+			const target = String(rawInput ?? "").trim();
+			if (target.length === 0) {
+				return { kind: "error", text: "请在 /douyin 后面粘贴一条抖音分享链接。" };
+			}
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), Math.max(30, settings.timeoutSeconds) * 1000);
+			try {
+				const outcome = await runScript(settings, { action: "ingest", target, force: true }, controller.signal);
+				return { kind: outcome.ok ? "success" : "error", text: describeIngest(outcome) };
+			} catch (error) {
+				return { kind: "error", text: `抓取失败：${String((error && error.message) || error)}` };
+			} finally {
+				clearTimeout(timer);
+			}
+		},
+	}), "douyin-kb /douyin command");
 }
 
-const inject = ["tools"];
+const inject = ["tools", "commands"];
 
 export { apply, inject };

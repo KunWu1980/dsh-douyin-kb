@@ -153,8 +153,13 @@ window.__ModuleLoader__.load({
 
     function service(ctx, name) {
       try {
-        if (typeof ctx.get === 'function') return ctx.get(name);
-        return ctx[name];
+        const value = ctx[name];
+        if (value !== undefined) return value;
+      } catch {
+        // 未声明的服务会抛 "cannot get property ... without inject"，改用 ctx.get 兜底
+      }
+      try {
+        return typeof ctx.get === 'function' ? ctx.get(name) : undefined;
       } catch {
         return undefined;
       }
@@ -167,7 +172,7 @@ window.__ModuleLoader__.load({
           ? sessions.list.getSnapshot()
           : undefined;
         if (snapshot === undefined || snapshot === null) return undefined;
-        for (const key of ['activeId', 'currentId', 'selectedId']) {
+        for (const key of ['activeId', 'currentId', 'selectedId', 'current', 'active', 'selected', 'lastSessionId']) {
           if (typeof snapshot[key] === 'string' && snapshot[key].length > 0) return snapshot[key];
         }
         if (Array.isArray(snapshot.order) && snapshot.order.length > 0) {
@@ -183,29 +188,54 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function describe(result, t) {
-      if (result === undefined || result === null) return t('missingCommand');
-      const text = typeof result.text === 'string' && result.text.trim().length > 0 ? result.text.trim() : '';
+    // remote.commands.execute 的真实返回（见内置 dsh-client-ui-commands）：
+    // { ok, value: { commandId, result: { kind, text, ... } } }
+    // 命令未注册时 value===undefined；refused 时 ok===false 并带 error。
+    function describe(response, t) {
+      if (!response || response.ok !== true) {
+        const error = response && response.error;
+        return error
+          ? error.code + ': ' + error.message
+          : t('missingCommand');
+      }
+      const value = response.value;
+      if (value === undefined || value === null) return t('missingCommand');
+      const outcome = value.result !== undefined && value.result !== null ? value.result : value;
+      const text = typeof outcome.text === 'string' && outcome.text.trim().length > 0 ? outcome.text.trim() : '';
       if (text.length > 0) return text;
-      return result.kind === 'success' ? t('done') : t('missingCommand');
+      return outcome.kind === 'success' ? t('done') : t('missingCommand');
     }
 
     return {
-      inject: ['slots', 'locale'],
+      // 与内置 schedule 面板同样使用数组式注入（这些名字都是宿主真实服务）。
+      // 面板需要 remote.commands 执行 /douyin，uiWorkspace/sessions 用于定位当前会话。
+      inject: ['slots', 'locale', 'remote', 'remote.commands', 'sessions', 'uiWorkspace'],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'douyin-kb: dictionaries');
         const t = ctx.locale.bind(NS);
 
         const run = async (url) => {
           const sessionId = latestSessionId(ctx);
-          const remote = service(ctx, 'remote');
-          const commands = remote && remote.commands ? remote.commands : undefined;
+          let commands;
+          try {
+            commands = ctx.remote && ctx.remote.commands ? ctx.remote.commands : undefined;
+          } catch {
+            commands = undefined;
+          }
+          let failure;
           if (sessionId !== undefined && commands !== undefined && typeof commands.execute === 'function') {
-            const response = await commands.execute(sessionId, '/douyin ' + url, []);
-            if (!response.ok) {
-              return { ok: false, text: response.error.code + ': ' + response.error.message };
+            try {
+              const response = await commands.execute(sessionId, '/douyin ' + url, []);
+              if (response && response.ok === true && response.value !== undefined && response.value !== null) {
+                const outcome = response.value.result !== undefined && response.value.result !== null
+                  ? response.value.result
+                  : response.value;
+                return { ok: outcome.kind === 'success', text: describe(response, t) };
+              }
+              failure = describe(response, t);
+            } catch (error) {
+              failure = error && error.message ? String(error.message) : t('missingCommand');
             }
-            return { ok: response.value !== undefined && response.value.kind === 'success', text: describe(response.value, t) };
           }
           const workspace = service(ctx, 'uiWorkspace');
           if (workspace !== undefined && typeof workspace.startSession === 'function') {
@@ -213,9 +243,9 @@ window.__ModuleLoader__.load({
               prompt: '请用 douyin_kb 工具（action=ingest）把这条抖音视频导入我的 Obsidian 知识库：\n' + url,
               whenDraftExists: 'append',
             });
-            return { ok: true, text: t('incomplete') };
+            return { ok: true, text: t('incomplete') + (failure ? '（' + failure + '）' : '') };
           }
-          return { ok: false, text: t('missingCommand') };
+          return { ok: false, text: failure || t('missingCommand') };
         };
 
         ctx.slots.inject('main', () => ctx.slots.register({
