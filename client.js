@@ -13,11 +13,15 @@ window.__ModuleLoader__.load({
       placeholder: '粘贴抖音分享链接或整段分享文案，例如 https://v.douyin.com/xxxxxx/',
       start: '开始抓取',
       starting: '正在抓取…',
+      stop: '停止抓取',
+      stopping: '正在停止…',
       running: '正在抓取，请稍候（下载视频 + 离线语音转写，大约 1–3 分钟）…',
       empty: '请先粘贴一条抖音链接。',
       done: '已导入：',
       incomplete: '已在新会话草稿里填入抓取请求，请按回车开始。',
       missingCommand: '没有找到 /douyin 命令，请重启 DeepSeek Harness 后再试。',
+      popupDone: '抓取录入完成',
+      popupFailed: '抓取失败',
       notesTitle: '注意事项',
       note1: '首次使用需扫码登录一次抖音：会弹出浏览器窗口，用手机抖音扫码确认即可，之后再使用无需重复登录。',
       note2: '受限于本地语音模型，转写结果会偶有错字，导入完成后需人工校对修正。',
@@ -30,11 +34,15 @@ window.__ModuleLoader__.load({
       placeholder: 'Paste a Douyin share link or share text, e.g. https://v.douyin.com/xxxxxx/',
       start: 'Start importing',
       starting: 'Importing…',
+      stop: 'Stop',
+      stopping: 'Stopping…',
       running: 'Importing now. Downloading and transcribing offline takes about 1–3 minutes…',
       empty: 'Paste a Douyin link first.',
       done: 'Imported: ',
       incomplete: 'The request was placed in a new session draft. Press Enter to start.',
       missingCommand: 'The /douyin command is missing. Restart DeepSeek Harness and try again.',
+      popupDone: 'Import finished',
+      popupFailed: 'Import failed',
       notesTitle: 'Before you start',
       note1: 'The first run needs a Douyin QR sign-in: a browser window opens, scan it with the Douyin app once, and later runs reuse that session.',
       note2: 'The local speech model is not perfect, so the transcript may contain typos that need a manual review after importing.',
@@ -85,6 +93,25 @@ window.__ModuleLoader__.load({
         try {
           const outcome = await props.run(raw);
           setStatus({ kind: outcome.ok ? 'ok' : 'error', text: outcome.text });
+          const text = String((outcome && outcome.text) || '');
+          // 草稿回退与主动停止都不算“录入完成”，不弹提醒
+          if (!outcome.draft && text.indexOf(STOP_TEXT) !== 0) {
+            showPopup(outcome.ok ? t('popupDone') : t('popupFailed'), text, outcome.ok);
+            notifyDesktop(outcome.ok ? t('popupDone') : t('popupFailed'), text);
+          }
+        } catch (error) {
+          const text = String((error && error.message) || error);
+          setStatus({ kind: 'error', text });
+          showPopup(t('popupFailed'), text, false);
+        }
+      };
+
+      const stop = async () => {
+        if (!busy || typeof props.stop !== 'function') return;
+        setStatus({ kind: 'busy', text: t('stopping') });
+        try {
+          const text = await props.stop();
+          setStatus({ kind: 'busy', text: String(text || t('stopping')) });
         } catch (error) {
           setStatus({ kind: 'error', text: String((error && error.message) || error) });
         }
@@ -116,7 +143,7 @@ window.__ModuleLoader__.load({
             fontFamily: 'inherit',
           },
         }),
-        h('div', { style: { margin: '14px 0 0' } },
+        h('div', { style: { margin: '14px 0 0', display: 'flex', gap: 10, alignItems: 'center' } },
           h('button', {
             type: 'button',
             onClick: submit,
@@ -132,6 +159,20 @@ window.__ModuleLoader__.load({
               cursor: busy ? 'progress' : 'pointer',
             },
           }, busy ? t('starting') : t('start')),
+          busy && typeof props.stop === 'function' ? h('button', {
+            type: 'button',
+            onClick: stop,
+            style: {
+              padding: '8px 16px',
+              fontSize: 14,
+              fontWeight: 500,
+              borderRadius: 8,
+              border: '1px solid ' + colors.error,
+              background: 'transparent',
+              color: colors.error,
+              cursor: 'pointer',
+            },
+          }, t('stop')) : null,
         ),
         status === null ? null : h('div', { style: { margin: '12px 0 0', color: statusColor, fontSize: 13, whiteSpace: 'pre-wrap' } }, status.text),
         h('div', {
@@ -207,6 +248,72 @@ window.__ModuleLoader__.load({
       return text || (outcome.kind === 'success' ? t('done') : t('missingCommand'));
     }
 
+    // /douyin handler 被用户主动停止时返回的固定文案（index.js 同步维护）。
+    const STOP_TEXT = '已停止抓取。';
+
+    /** 系统通知：Electron 渲染层里 Web Notification 会映射为系统弹窗；不可用则静默跳过。 */
+    function notifyDesktop(title, body) {
+      try {
+        const N = typeof Notification === 'function' ? Notification : undefined;
+        if (!N) return;
+        if (N.permission === 'granted') {
+          new N(title, { body: body.length > 180 ? body.slice(0, 177) + '…' : body });
+        } else if (N.permission === 'default' && typeof N.requestPermission === 'function') {
+          N.requestPermission().then((granted) => {
+            if (granted === 'granted') new N(title, { body: body.length > 180 ? body.slice(0, 177) + '…' : body });
+          }).catch(() => {});
+        }
+      } catch {
+        // 通知不可用时静默跳过
+      }
+    }
+
+    /** 应用内浮动弹窗：右下角浮出，12 秒后自动消失，可手动关闭。 */
+    function showPopup(title, body, ok) {
+      try {
+        if (typeof document === 'undefined' || !document || !document.body) return;
+        const card = document.createElement('div');
+        card.style.cssText = [
+          'position:fixed', 'right:24px', 'bottom:24px', 'z-index:2147483000',
+          'max-width:380px', 'padding:14px 18px', 'border-radius:12px',
+          'background:var(--dsw-alias-bg-layer-1,#1e1f24)',
+          'color:var(--dsw-alias-label-primary,#f2f3f5)',
+          'border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.12))',
+          'box-shadow:0 8px 30px rgba(0,0,0,.35)',
+          'font-size:13px', 'line-height:1.6', 'font-family:inherit',
+        ].join(';');
+        const head = document.createElement('div');
+        head.textContent = title;
+        head.style.cssText = 'font-weight:600;font-size:14px;margin:0 26px 6px 0;color:' +
+          (ok ? 'var(--dsw-alias-state-business-primary,#37b26c)' : 'var(--dsw-alias-state-error-primary,#e5544b)');
+        const text = document.createElement('div');
+        text.textContent = body;
+        text.style.cssText = 'white-space:pre-wrap;word-break:break-all;';
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.textContent = '×';
+        closeBtn.setAttribute('aria-label', 'close');
+        closeBtn.style.cssText = [
+          'position:absolute', 'top:8px', 'right:10px', 'width:22px', 'height:22px',
+          'border:none', 'border-radius:6px', 'background:transparent',
+          'color:var(--dsw-alias-label-secondary,#9aa0a6)', 'font-size:16px', 'line-height:1',
+          'cursor:pointer', 'padding:0',
+        ].join(';');
+        card.appendChild(head);
+        card.appendChild(text);
+        card.appendChild(closeBtn);
+        const dismiss = () => {
+          if (card.timer) clearTimeout(card.timer);
+          if (card.parentNode) card.parentNode.removeChild(card);
+        };
+        closeBtn.addEventListener('click', dismiss);
+        card.timer = setTimeout(dismiss, 12000);
+        document.body.appendChild(card);
+      } catch {
+        // 无法弹出时静默跳过（面板状态行仍会显示结果）
+      }
+    }
+
     return {
       // 与内置 schedule 面板同样使用数组式注入（这些名字都是宿主真实服务）。
       // 面板需要 remote.commands 执行 /douyin，uiWorkspace/sessions 用于定位当前会话。
@@ -240,16 +347,34 @@ window.__ModuleLoader__.load({
               prompt: '请用 douyin_kb 工具（action=ingest）把这条抖音视频导入我的 Obsidian 知识库：\n' + url,
               whenDraftExists: 'append',
             });
-            return { ok: true, text: t('incomplete') + (failure ? '（' + failure + '）' : '') };
+            return { ok: true, draft: true, text: t('incomplete') + (failure ? '（' + failure + '）' : '') };
           }
           return { ok: false, text: failure || t('missingCommand') };
+        };
+
+        const stop = async () => {
+          const sessionId = latestSessionId(ctx);
+          let commands;
+          try {
+            commands = ctx.remote && ctx.remote.commands ? ctx.remote.commands : undefined;
+          } catch {
+            commands = undefined;
+          }
+          if (sessionId !== undefined && commands !== undefined && typeof commands.execute === 'function') {
+            try {
+              return describe(await commands.execute(sessionId, '/douyin-stop', []), t);
+            } catch (error) {
+              return error && error.message ? String(error.message) : t('missingCommand');
+            }
+          }
+          return t('missingCommand');
         };
 
         ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: PANEL_ID,
           locale: NS,
-          inject: () => ({ t, run }),
+          inject: () => ({ t, run, stop }),
         }, DouyinPanel));
 
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({

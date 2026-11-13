@@ -43,6 +43,14 @@ function detectObsidianVault() {
 	}
 }
 
+/** Runs currently executing inside the bundle process, keyed by the invoking agent/session. */
+const activeRuns = new Map();
+
+/** Same stringification for both /douyin and /douyin-stop, whatever agent.session actually is. */
+function runKeyOf(invocation) {
+	return String((invocation && invocation.agent && invocation.agent.session) ?? (invocation && invocation.commandId) ?? "default");
+}
+
 function resolveVault(configured) {
 	return (
 		configured ||
@@ -221,23 +229,45 @@ function apply(ctx, config) {
 		name: "douyin",
 		description: "把一条抖音视频下载、离线转写并写入本机 Obsidian 知识库",
 		input: { hint: "<抖音分享链接或整段分享文案>" },
-		handler: async ({ rawInput }) => {
-			const target = String(rawInput ?? "").trim();
+		handler: async (invocation) => {
+			const target = String(invocation.rawInput ?? "").trim();
 			if (target.length === 0) {
 				return { kind: "error", text: "请在 /douyin 后面粘贴一条抖音分享链接。" };
 			}
 			const controller = new AbortController();
+			const entry = { controller, stopped: false };
+			const key = runKeyOf(invocation);
+			activeRuns.set(key, entry);
 			const timer = setTimeout(() => controller.abort(), timeoutMs);
 			try {
 				const outcome = await runScript(settings, { action: "ingest", target, force: true }, controller.signal);
+				if (controller.signal.aborted) {
+					return { kind: "error", text: entry.stopped ? "已停止抓取。" : "抓取超时（超过允许时长），请重试。" };
+				}
 				return { kind: outcome.ok ? "success" : "error", text: describeIngest(outcome) };
 			} catch (error) {
 				return { kind: "error", text: `抓取失败：${String((error && error.message) || error)}` };
 			} finally {
 				clearTimeout(timer);
+				activeRuns.delete(key);
 			}
 		},
 	}), "douyin-kb /douyin command");
+
+	ctx.effect(() => ctx.commands.register({
+		name: "douyin-stop",
+		description: "停止正在进行的抖音抓取",
+		handler: async (invocation) => {
+			let entry = activeRuns.get(runKeyOf(invocation));
+			if (entry === undefined && activeRuns.size === 1) entry = [...activeRuns.values()][0];
+			if (entry === undefined) {
+				return { kind: "error", text: "当前没有正在进行的抓取。" };
+			}
+			entry.stopped = true;
+			entry.controller.abort();
+			return { kind: "success", text: "正在停止抓取…" };
+		},
+	}), "douyin-kb /douyin-stop command");
 }
 
 const inject = ["tools", "commands"];
