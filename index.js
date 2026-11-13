@@ -185,11 +185,11 @@ function describeIngest(outcome) {
 }
 
 function apply(ctx, config) {
+	const timeoutMs = Math.max(30, Number(config?.timeoutSeconds) || 900) * 1000;
 	const settings = {
-		vault: resolveVault(config && config.vault),
-		kbHome: (config && config.kbHome) || DEFAULT_KB_HOME,
-		python: findPython(config && config.python),
-		timeoutSeconds: (config && Number(config.timeoutSeconds)) || 900,
+		vault: resolveVault(config?.vault),
+		kbHome: config?.kbHome || DEFAULT_KB_HOME,
+		python: findPython(config?.python),
 	};
 
 	ctx.tools.register({
@@ -204,14 +204,12 @@ function apply(ctx, config) {
 			schema: OUTPUT_SCHEMA,
 			render: (_args, value) => [{ type: "text", text: String(value.log ?? "").trim() || "[douyin_kb] done" }],
 		},
-		timeoutMs: Math.max(30, settings.timeoutSeconds) * 1000,
+		timeoutMs,
 		isConcurrencySafe: () => false,
 		async execute(args, exec) {
 			const action = String(args.action);
-			if (action === "ingest" || action === "batch" || action === "probe" || action === "transcribe") {
-				if (String(args.target ?? "").trim().length === 0) {
-					throw new Error(`douyin_kb action=${action} requires a non-empty target`);
-				}
+			if (["ingest", "batch", "probe", "transcribe"].includes(action) && !String(args.target ?? "").trim()) {
+				throw new Error(`douyin_kb action=${action} requires a non-empty target`);
 			}
 			const outcome = await runScript(settings, args, exec.signal);
 			if (exec.signal.aborted) throw new Error("douyin_kb aborted");
@@ -229,7 +227,7 @@ function apply(ctx, config) {
 				return { kind: "error", text: "请在 /douyin 后面粘贴一条抖音分享链接。" };
 			}
 			const controller = new AbortController();
-			const timer = setTimeout(() => controller.abort(), Math.max(30, settings.timeoutSeconds) * 1000);
+			const timer = setTimeout(() => controller.abort(), timeoutMs);
 			try {
 				const outcome = await runScript(settings, { action: "ingest", target, force: true }, controller.signal);
 				return { kind: outcome.ok ? "success" : "error", text: describeIngest(outcome) };

@@ -191,19 +191,20 @@ window.__ModuleLoader__.load({
     // remote.commands.execute 的真实返回（见内置 dsh-client-ui-commands）：
     // { ok, value: { commandId, result: { kind, text, ... } } }
     // 命令未注册时 value===undefined；refused 时 ok===false 并带 error。
-    function describe(response, t) {
-      if (!response || response.ok !== true) {
-        const error = response && response.error;
-        return error
-          ? error.code + ': ' + error.message
-          : t('missingCommand');
-      }
+    function unwrap(response) {
+      if (!response || response.ok !== true || response.value == null) return null;
       const value = response.value;
-      if (value === undefined || value === null) return t('missingCommand');
-      const outcome = value.result !== undefined && value.result !== null ? value.result : value;
-      const text = typeof outcome.text === 'string' && outcome.text.trim().length > 0 ? outcome.text.trim() : '';
-      if (text.length > 0) return text;
-      return outcome.kind === 'success' ? t('done') : t('missingCommand');
+      return value.result != null ? value.result : value;
+    }
+
+    function describe(response, t) {
+      const outcome = unwrap(response);
+      if (outcome === null) {
+        const error = response && response.error;
+        return error ? error.code + ': ' + error.message : t('missingCommand');
+      }
+      const text = typeof outcome.text === 'string' ? outcome.text.trim() : '';
+      return text || (outcome.kind === 'success' ? t('done') : t('missingCommand'));
     }
 
     return {
@@ -226,12 +227,8 @@ window.__ModuleLoader__.load({
           if (sessionId !== undefined && commands !== undefined && typeof commands.execute === 'function') {
             try {
               const response = await commands.execute(sessionId, '/douyin ' + url, []);
-              if (response && response.ok === true && response.value !== undefined && response.value !== null) {
-                const outcome = response.value.result !== undefined && response.value.result !== null
-                  ? response.value.result
-                  : response.value;
-                return { ok: outcome.kind === 'success', text: describe(response, t) };
-              }
+              const outcome = unwrap(response);
+              if (outcome !== null) return { ok: outcome.kind === 'success', text: describe(response, t) };
               failure = describe(response, t);
             } catch (error) {
               failure = error && error.message ? String(error.message) : t('missingCommand');

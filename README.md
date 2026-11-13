@@ -1,4 +1,4 @@
-﻿# 抖音转OB（初学者适用）— 抖音视频 → Obsidian 知识库
+# 抖音转OB（初学者适用）— 抖音视频 → Obsidian 知识库
 
 > 一个简单的人工提供抖音链接（可通过抖音PC客户端获得），由本插件自动将视频内容转化文字记录，并自动导入到Obsidian中，适用于harness、个人知识库搭建初学者上手。也是本人使用harness完全借助deepseek创建的第一个插件，具备实验性质：-）
 
@@ -12,16 +12,11 @@
 
 ## 安装
 
-发布渠道（任选其一）：
-
 ```sh
-# 1. 从 GitHub 仓库（推荐给用户；仓库根目录即本目录）
+# 1. 从 GitHub 仓库（推荐）
 dsh plugin add github:KunWu1980/dsh-douyin-kb
 
-# 2. 从本地打包产物
-dsh plugin add C:\path\to\douyin-kb-1.0.0.tgz
-
-# 3. 从本地目录（开发时用，link 安装）
+# 2. 从本地目录（开发时用，link 安装）
 dsh plugin add C:\path\to\douyin-kb-plugin
 ```
 
@@ -127,18 +122,15 @@ douyin-kb-plugin/
 ├─ cordis.patch.yml      # 插入插件行
 ├─ locale/{en,zh}.json   # 插件名与描述
 ├─ icon.svg
-├─ assets/douyin_kb.py   # 抓取 + 下载 + 转写 + 写笔记
-└─ docs/market-entry.yml # 上架 DSH 插件市场的条目文件
+└─ assets/douyin_kb.py   # 抓取 + 下载 + 转写 + 写笔记
 ```
 
-## 发布到 DSH 插件市场
+## 更新日志
 
-市场列表来自精选仓库 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)，一插件一个 YAML。步骤见 [`docs/market-entry.yml`](docs/market-entry.yml) 与下方清单：
-
-1. 建公开 GitHub 仓库（根目录即本目录），加 topic `dsh-plugin`；
-2. 仓库创建满 1 天后，向上游提 PR：新增 `data/plugins/<owner>__<repo>.yml`；
-3. 合并后站点与市场通常一天内生效，安装走 `github:` 直达源码，**不强制发 npm**；
-4. （可选）发 npm 时 `package.json` 的 `repository` 必须指回被收录的仓库。
+- **1.2.0**（2026-11-13）— 全面梳理精简代码：宿主侧配置读取统一可选链、超时设置收敛到一处；客户端侧新增 `unwrap()` 统一解析 `remote.commands.execute` 返回值；Python 侧移除未使用的返回值与死代码、修复重复导入、收敛 argparse 公共参数。README 精简为功能介绍并新增本更新日志。
+- **1.1.3**（2026-11-12）— 修复面板「开始抓取」误报「没有找到 /douyin 命令」：`remote.commands.execute` 的返回值此前少剥一层嵌套；`/douyin` 命令改为模块级注入注册。
+- **1.1.1 – 1.1.2** — 调试中间版本，未单独发布。
+- **1.1.0**（2026-11-10）— 初版发布。知识库路径自动识别 Obsidian 当前打开的库；README 与自动识别行为对齐。
 
 ## 背景：为什么不用 yt-dlp
 

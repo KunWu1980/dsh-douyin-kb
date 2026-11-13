@@ -125,11 +125,11 @@ def pick_url(text: str) -> str:
     raise SystemExit("没有在输入里找到抖音链接。请粘贴完整分享文案或 https://v.douyin.com/xxx 短链。")
 
 
-def resolve_short(url: str) -> tuple[str, str]:
-    """跟随短链跳转，返回 (最终URL, 视频ID)。"""
+def resolve_short(url: str) -> str:
+    """跟随短链跳转，从最终 URL / 页面里解析出视频 ID。"""
     import urllib.request
 
-    final = url
+    final, html = url, ""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA_MOBILE})
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -137,14 +137,11 @@ def resolve_short(url: str) -> tuple[str, str]:
             html = resp.read(200_000).decode("utf-8", "ignore")
     except Exception as exc:
         log(f"  ! 短链解析失败：{type(exc).__name__}: {exc}")
-        html = ""
     m = VIDEO_ID_RE.search(final) or VIDEO_ID_RE.search(url)
-    vid = m.group(1) if m else ""
-    if not vid and html:
-        m2 = re.search(r'"aweme_id":"(\d+)"', html) or re.search(r"itemId[\"\s:]+[\"']?(\d{10,})", html)
-        if m2:
-            vid = m2.group(1)
-    return final, vid
+    if m:
+        return m.group(1)
+    m2 = re.search(r'"aweme_id":"(\d+)"', html) or re.search(r"itemId[\"\s:]+[\"']?(\d{10,})", html)
+    return m2.group(1) if m2 else ""
 
 
 def fmt_ts(seconds: float) -> str:
@@ -256,7 +253,6 @@ class Browser:
                 for item in (data.get("aweme_list") or []):
                     if item.get("aweme_id"):
                         found.append(item)
-                self._no_more = bool(data.get("has_more") is False)
 
         self.page.on("response", on_resp)
         try:
@@ -377,8 +373,6 @@ def decode_audio(path: Path, sample_rate: int = 16000):
             chunks.append(np.asarray(out.to_ndarray()).reshape(-1))
     if not chunks:
         raise SystemExit("音轨解码为空。")
-    import numpy as np
-
     return np.concatenate(chunks).astype(np.float32) / 32768.0
 
 
@@ -399,7 +393,7 @@ def _vad_config():
     return cfg
 
 
-def transcribe(audio, enable_vad: bool = True) -> list[dict]:
+def transcribe(audio) -> list[dict]:
     import numpy as np
     import sherpa_onnx
 
@@ -415,11 +409,11 @@ def transcribe(audio, enable_vad: bool = True) -> list[dict]:
         use_itn=True, language="zh", debug=False,
     )
 
-    cfg = _vad_config() if enable_vad else None
+    cfg = _vad_config()
     if cfg is not None:
         vad = sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=180)
         window = 1600
-        speech: list[tuple[float, "np.ndarray"]] = []
+        speech: list[tuple[float, np.ndarray]] = []
         for i in range(0, max(0, len(audio) - window), window):
             vad.accept_waveform(audio[i : i + window])
             while not vad.empty():
@@ -560,7 +554,7 @@ def save_cover(browser: Browser, meta: dict) -> Path | None:
 def do_ingest(target: str, vault: Path, force: bool, no_transcribe: bool) -> None:
     url = pick_url(target)
     log(f"→ 解析链接：{url}")
-    _, vid = resolve_short(url)
+    vid = resolve_short(url)
     if not vid:
         raise SystemExit("没能从链接里解析出视频 ID。请确认是单条视频的分享链接。")
     log(f"  视频 ID：{vid}")
@@ -684,24 +678,24 @@ def main() -> None:
         pass
     ap = argparse.ArgumentParser(description="抖音视频 → Obsidian 知识库")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    vault_default = os.environ.get("OBSIDIAN_VAULT", str(DEFAULT_VAULT))
+
+    def add_common_flags(p):
+        p.add_argument("--vault", default=vault_default)
+        p.add_argument("--force", action="store_true", help="已存在时覆盖")
+        p.add_argument("--no-transcribe", action="store_true", help="只抓文案不转写")
 
     for name in ("ingest", "probe"):
         p = sub.add_parser(name)
         p.add_argument("target", help="分享文案或链接")
-        p.add_argument("--vault", default=os.environ.get("OBSIDIAN_VAULT", str(DEFAULT_VAULT)))
-        p.add_argument("--force", action="store_true", help="已存在时覆盖")
-        p.add_argument("--no-transcribe", action="store_true", help="只抓文案不转写")
+        add_common_flags(p)
 
     b = sub.add_parser("batch")
     b.add_argument("home", help="博主主页链接")
     b.add_argument("--limit", type=int, default=20)
-    b.add_argument("--vault", default=os.environ.get("OBSIDIAN_VAULT", str(DEFAULT_VAULT)))
-    b.add_argument("--force", action="store_true")
-    b.add_argument("--no-transcribe", action="store_true")
+    add_common_flags(b)
 
-    t = sub.add_parser("transcribe")
-    t.add_argument("file")
-
+    sub.add_parser("transcribe").add_argument("file")
     sub.add_parser("login")
 
     args = ap.parse_args()
@@ -711,8 +705,7 @@ def main() -> None:
         return
 
     if args.cmd == "probe":
-        url = pick_url(args.target)
-        _, vid = resolve_short(url)
+        vid = resolve_short(pick_url(args.target))
         with Browser() as browser:
             detail = fetch_detail(browser, vid)
             meta = collect_meta(detail, vid) if detail.get("desc") is not None else {"id": vid}
